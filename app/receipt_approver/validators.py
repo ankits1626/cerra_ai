@@ -18,7 +18,7 @@ class LuxotticaReceiptValidator:
     def _load_sop(self):
         # Read the Excel file
         file_path = settings.lux_sop_filepath
-        print(f"<<<<<<<< sop file_path = {file_path}")
+        # print(f"<<<<<<<< sop file_path = {file_path}")
         df = pd.read_excel(file_path, sheet_name="Brand List")
 
         # Select specific rows and columns
@@ -39,7 +39,7 @@ class LuxotticaReceiptValidator:
     # validate receipt id
     def validate_receipt_number(self, sop_df, blocks, user_input_value, input_dict):
         retval = []
-        print(f"user_input_receipt_number = {user_input_value}")
+        # print(f"user_input_receipt_number = {user_input_value}")
         for block in blocks:
             if block.block_type in ["LINE", "WORD"]:
                 if block.has_value(
@@ -50,7 +50,7 @@ class LuxotticaReceiptValidator:
 
     # validate receipt date
     def validate_date(self, sop_df, blocks, user_input_value, input_dict):
-        print(f"validate_date called date = {user_input_value}")
+        # print(f"validate_date called date = {user_input_value}")
         retval = []
         for block in blocks:
             if block.block_type in ["LINE", "WORD", "QUERY_RESULT"]:
@@ -69,7 +69,7 @@ class LuxotticaReceiptValidator:
         self, sop_df, blocks, user_input_value, input_dict, validated_brand_model_blocks
     ):
         user_input_value = self.clean_up_user_input_brand(user_input_value)
-        print(f"validate_brand called brand = {user_input_value}")
+        # print(f"validate_brand called brand = {user_input_value}")
         retval = []
         for block in blocks:
             if block.block_type in ["LINE", "WORD"]:

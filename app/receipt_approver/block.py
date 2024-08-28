@@ -66,9 +66,9 @@ class Block:
                 parsed_date.strftime("%-d/%-m/%y"),  # Day/Month/Year
                 parsed_date.strftime("%-m/%-d/%y"),  # Month/Day/Year
             ]
-            print(
-                f"******** has_user_input_dat euser_input_date ={user_input_date} --- pre = {pre} --- text = {self.text} --- formatted_dates ={formatted_dates}"
-            )
+            # print(
+            #     f"******** has_user_input_dat euser_input_date ={user_input_date} --- pre = {pre} --- text = {self.text} --- formatted_dates ={formatted_dates}"
+            # )
             # print(f'text = {self.text} formatted_date = {formatted_dates} user_input_date = {user_input_date}')
             return user_input_date in formatted_dates
         except (ValueError, OverflowError, ParserError):
@@ -96,13 +96,13 @@ class Block:
             if splits and len(splits) == 2:
                 row = find_row_by_code(sop_df, value)
                 user_entered_brand = input_dict.get("brand", None)
-                print(
-                    f"~~~~~~~ splits = {splits}  user_entered_brand ={user_entered_brand}"
-                )
+                # print(
+                #     f"~~~~~~~ splits = {splits}  user_entered_brand ={user_entered_brand}"
+                # )
                 if row and user_entered_brand:
-                    print(
-                        f" row = {row} ------ user_entered_brand {user_entered_brand}"
-                    )
+                    # print(
+                    #     f" row = {row} ------ user_entered_brand {user_entered_brand}"
+                    # )
                     user_entered_brand = user_entered_brand.lower().replace("-", "")
                     brand_matches = False
 

@@ -1,9 +1,10 @@
 import base64
+import logging
 from typing import Dict
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.config.database import get_db
@@ -16,12 +17,16 @@ from .validator_factory import ValidatorFactory
 
 router = APIRouter()
 
+logger = logging.getLogger(__name__)
+
 
 @router.post("/validate-receipt")
-def validate_receipt(data: ReceiptData, db: Session = Depends(get_db)) -> Dict:
-    print(f"<<<<<<<< updated receipt # = {data.receipt_number}")
-    print(f"<<<<<<<< receipt client= {data.receipt_client}")
-    print(f"<<<<<<<< receipt date= {data.receipt_date}")
+def validate_receipt(
+    request: Request, data: ReceiptData, db: Session = Depends(get_db)
+) -> Dict:
+    logger.info(f"<<<<<<<< updated receipt # = {data.receipt_number}", request)
+    logger.info(f"<<<<<<<< receipt client= {data.receipt_client}", request)
+    logger.info(f"<<<<<<<< receipt date= {data.receipt_date}", request)
 
     try:
         if data.response_id:
@@ -70,9 +75,9 @@ def validate_receipt(data: ReceiptData, db: Session = Depends(get_db)) -> Dict:
 
         # Validate the Textract response
         validator_response = validator.validate(data.dict(), ocr_raw)
-        print(
-            f"<<<<< validator_response = {validator_response} - {not validator_response}"
-        )
+        # print(
+        #     f"<<<<< validator_response = {validator_response} - {not validator_response}"
+        # )
         # if not validator_response:
         #     raise HTTPException(
         #         status_code=400, detail="Validation failed for receipt client."

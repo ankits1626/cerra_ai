@@ -7,6 +7,7 @@ load_dotenv()
 
 
 class Settings:
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
     DATA_PATH: str = os.getenv("DATA_PATH", "data")
     LUX_SOP_FILENAME: str = "lux_sop_updated.xlsx"
 

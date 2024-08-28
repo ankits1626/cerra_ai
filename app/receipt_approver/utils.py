@@ -17,14 +17,14 @@ def split_string(s):
 
 def find_row_by_code(df, text):
     split_result = split_string(text)
-    print(f"find_row_by_code text = {text} split_result ={split_result}")
+    # print(f"find_row_by_code text = {text} split_result ={split_result}")
     if split_result:
         extracted_code = split_result[0].upper()
-        # matching_row = df[df["Code"].apply(lambda x: extracted_code in x)]
-        matching_row = df[df["Code"].apply(lambda x: print(x) or extracted_code in x)]
-        print(
-            f"find_row_by_code text = {text} split_result ={split_result} matching_row ={matching_row}"
-        )
+        matching_row = df[df["Code"].apply(lambda x: extracted_code in x)]
+        # matching_row = df[df["Code"].apply(lambda x: print(x) or extracted_code in x)]
+        # print(
+        #     f"find_row_by_code text = {text} split_result ={split_result} matching_row ={matching_row}"
+        # )
         if not matching_row.empty:
             return {
                 "OCR_VALUE": matching_row["OCR_VALUE"].values.tolist()[0],
