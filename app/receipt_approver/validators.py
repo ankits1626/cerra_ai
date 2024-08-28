@@ -2,7 +2,7 @@ from typing import Dict
 
 import pandas as pd
 
-from config.settings import settings
+from app.config.settings import settings
 
 from .block import Block
 from .utils import find_row_by_code, is_string_in_array_case_insensitive
