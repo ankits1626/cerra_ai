@@ -21,6 +21,7 @@ class ReceiptApproverResponse(Base):
     ocr_raw = Column(JSON, nullable=False)
     processed = Column(JSON, nullable=False)
     user_input_data = Column(JSON, nullable=False)
+    receipt_classifier_response = Column(JSON, nullable=True)
     last_updated = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

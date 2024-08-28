@@ -35,5 +35,10 @@ class Settings:
     OCR_AWS_ACCESS_KEY_ID: str = os.getenv("OCR_AWS_ACCESS_KEY_ID")
     OCR_AWS_SECRET_ACCESS_KEY: str = os.getenv("OCR_AWS_SECRET_ACCESS_KEY")
 
+    # classifier
+    @property
+    def RECEIPT_CLASSIFIER_PATH(self):
+        return os.path.join("app", "models", "receipt_classifier_312.h5")
+
 
 settings = Settings()

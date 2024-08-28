@@ -6,7 +6,12 @@ from .schemas import ReceiptData
 
 
 def save_receipt_approver_response(
-    db: Session, ocr_raw: dict, processed: dict, client: str, receipt_data: ReceiptData
+    db: Session,
+    ocr_raw: dict,
+    processed: dict,
+    client: str,
+    receipt_data: ReceiptData,
+    receipt_classifier_response: dict,
 ) -> ReceiptApproverResponse:
     if receipt_data.response_id:
         # Fetch the existing ReceiptApproverResponse from the database
@@ -27,6 +32,7 @@ def save_receipt_approver_response(
                 "brand": receipt_data.brand,
                 "brand_model": receipt_data.brand_model,
             }
+            response.receipt_classifier_response = receipt_classifier_response
             db.commit()
             db.refresh(response)
             return response
@@ -44,6 +50,7 @@ def save_receipt_approver_response(
                 "brand": receipt_data.brand,
                 "brand_model": receipt_data.brand_model,
             },
+            receipt_classifier_response=receipt_classifier_response,
         )
         db.add(response)
         db.commit()

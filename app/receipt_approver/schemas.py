@@ -18,3 +18,4 @@ class ReceiptApproverResponseCreate(BaseModel):
     ocr_raw: Dict
     processed: Dict
     client: str
+    receipt_classifier_response: Dict
