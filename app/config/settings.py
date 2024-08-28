@@ -27,7 +27,7 @@ class Settings:
     @property
     def DATABASE_URL(self):
         retval = f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-        print(f"<<<<<<< DATABASE_URL = {retval}")
+        # print(f"<<<<<<< DATABASE_URL = {retval}")
         return retval
 
     # AWS

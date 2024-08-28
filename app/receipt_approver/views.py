@@ -11,8 +11,8 @@ from app.config.database import get_db
 from app.config.settings import settings
 from app.receipt_approver.crud import save_receipt_approver_response
 from app.receipt_approver.model_utils import predict_receipt_type
+from app.receipt_approver.models import ReceiptApproverResponse
 
-from .models import ReceiptApproverResponse
 from .schemas import ReceiptData
 from .validator_factory import ValidatorFactory
 
@@ -29,14 +29,21 @@ def validate_receipt(
     logger.info(f"<<<<<<<< receipt client= {data.receipt_client}", request)
     logger.info(f"<<<<<<<< receipt date= {data.receipt_date}", request)
 
+    existing_response = None
     try:
-        existing_response = None
         if data.response_id:
             existing_response = (
                 db.query(ReceiptApproverResponse)
                 .filter(ReceiptApproverResponse.id == data.response_id)
                 .first()
             )
+    except Exception as e:
+        logger.info(
+            f"Failed to retrieve existing response for ID {data.response_id}: {e}"
+        )
+        existing_response = None
+
+    try:
         # Decode the base64 encoded file and make a prediction
         keras_label, keras_prediction = predict_receipt_type(data.encoded_receipt_file)
 
@@ -61,6 +68,7 @@ def validate_receipt(
 
         # Validate the Textract response
         validator_response = validator.validate(data.dict(), ocr_raw)
+        logger.info("<<<<<< calling save_receipt_approver_response ")
         response = save_receipt_approver_response(
             db,
             ocr_raw,
@@ -84,6 +92,9 @@ def validate_receipt(
         }
         return response
     except Exception as e:
+        logger.error(f"<<<<< this error  = {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
         print(f"<<<<< this error  = {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
