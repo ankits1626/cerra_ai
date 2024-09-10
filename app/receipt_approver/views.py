@@ -25,6 +25,21 @@ logger = logging.getLogger(__name__)
 def validate_receipt(
     request: Request, data: ReceiptData, db: Session = Depends(get_db)
 ):
+    """
+    Validates a receipt by processing its OCR data, making a receipt type prediction, and applying custom validation rules.
+
+    ### Input:
+    - ReceiptData model containing the receipt information such as:
+      - **receipt_number**: The unique identifier of the receipt.
+      - **receipt_date**: The date the receipt was issued.
+      - **receipt_client**: The client for which the receipt validation is being processed.
+      - **encoded_receipt_file**: Base64-encoded string of the receipt image.
+
+    ### Output:
+    - **ReceiptApproverResponseSchema**: Contains the validation result, OCR data, and prediction information.
+    - Returns an HTTPException with error details if validation or processing fails.
+    """
+
     existing_response = retrieve_existing_response(db, data.response_id)
     keras_label, keras_prediction = make_keras_prediction(data.encoded_receipt_file)
 
