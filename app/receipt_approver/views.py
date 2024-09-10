@@ -1,11 +1,13 @@
 import base64
 import logging
-from typing import Dict
+from typing import Optional
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 from app.config.database import get_db
 from app.config.settings import settings
@@ -13,92 +15,83 @@ from app.receipt_approver.crud import save_receipt_approver_response
 from app.receipt_approver.model_utils import predict_receipt_type
 from app.receipt_approver.models import ReceiptApproverResponse
 
-from .schemas import ReceiptData
+from .schemas import ReceiptApproverResponseSchema, ReceiptData
 from .validator_factory import ValidatorFactory
 
 router = APIRouter()
-
 logger = logging.getLogger(__name__)
 
 
-@router.post("/validate-receipt")
+@router.post("/validate-receipt", response_model=ReceiptApproverResponseSchema)
 def validate_receipt(
     request: Request, data: ReceiptData, db: Session = Depends(get_db)
-) -> Dict:
-    logger.info(f"<<<<<<<< updated receipt # = {data.receipt_number}", request)
-    logger.info(f"<<<<<<<< receipt client= {data.receipt_client}", request)
-    logger.info(f"<<<<<<<< receipt date= {data.receipt_date}", request)
+):
+    client_ip = request.client.host
+    logger.info(
+        f"Received request from {client_ip} for receipt # {data.receipt_number} receipt date= {data.receipt_date} receipt client= {data.receipt_client}"
+    )
 
-    existing_response = None
+    existing_response = retrieve_existing_response(db, data.response_id)
+    keras_label, keras_prediction = make_keras_prediction(data.encoded_receipt_file)
+    logger.info(
+        f"********** keras_label {keras_label} keras_prediction {keras_prediction} "
+    )
+    file_data = base64.b64decode(data.encoded_receipt_file)
+    ocr_raw = (
+        existing_response.ocr_raw if existing_response else analyze_document(file_data)
+    )
+
+    validator = get_validator(data.receipt_client)
+    validator_response = validator.validate(data.model_dump(), ocr_raw)
+
+    return save_response_and_return_result(
+        db, ocr_raw, validator_response, keras_label, keras_prediction, data
+    )
+
+
+def retrieve_existing_response(
+    db: Session, response_id: Optional[str]
+) -> Optional[ReceiptApproverResponse]:
+    if not response_id:
+        return None
+
     try:
-        if data.response_id:
-            existing_response = (
-                db.query(ReceiptApproverResponse)
-                .filter(ReceiptApproverResponse.id == data.response_id)
-                .first()
-            )
-    except Exception as e:
-        logger.info(
-            f"Failed to retrieve existing response for ID {data.response_id}: {e}"
+        return (
+            db.query(ReceiptApproverResponse)
+            .filter(ReceiptApproverResponse.id == response_id)
+            .first()
         )
-        existing_response = None
+    except Exception as e:
+        logger.warning(
+            f"Failed to retrieve existing response for ID {response_id}: {e}"
+        )
+        return None
 
+
+def make_keras_prediction(encoded_receipt_file: str):
+    val = predict_receipt_type(encoded_receipt_file)
+    logger.info(f"******* val =  {val}")
+    keras_label, keras_prediction = predict_receipt_type(encoded_receipt_file)
+
+    if not keras_label or keras_prediction is None:
+        logger.error("Keras model prediction failed")
+        raise HTTPException(status_code=500, detail="Receipt type prediction failed.")
+
+    logger.info(
+        f"Keras model predicted: {keras_label} with confidence {keras_prediction}"
+    )
+    return keras_label, keras_prediction
+
+
+def get_validator(receipt_client: str):
     try:
-        # Decode the base64 encoded file and make a prediction
-        keras_label, keras_prediction = predict_receipt_type(data.encoded_receipt_file)
-
-        # Log the result of Keras prediction
-        logger.info(
-            f"<<<<<<< Keras model predicted: {keras_label} with confidence {keras_prediction}"
-        )
-
-        # Decode the base64 encoded file
-        file_data = base64.b64decode(data.encoded_receipt_file)
-        receipt_date = data.receipt_date
-        if existing_response:
-            ocr_raw = existing_response.ocr_raw
-        else:
-            ocr_raw = analyze_document(file_data)
-
-        # Get the appropriate validator
-        try:
-            validator = ValidatorFactory.get_validator(data.receipt_client)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-
-        # Validate the Textract response
-        validator_response = validator.validate(data.dict(), ocr_raw)
-        logger.info("<<<<<< calling save_receipt_approver_response ")
-        response = save_receipt_approver_response(
-            db,
-            ocr_raw,
-            validator_response,
-            data.receipt_client,
-            data,
-            {
-                "label": keras_label,
-                "confidence": float(keras_prediction),
-            },
-        )
-
-        response = {
-            "id": str(response.id),
-            "receipt_number": data.receipt_number,
-            "receipt_date": data.receipt_date,
-            "brand": data.brand,
-            "receipt_type": response.receipt_classifier_response,
-            "validation_result": validator_response,
-            "last_updated": response.last_updated,
-        }
-        return response
-    except Exception as e:
-        logger.error(f"<<<<< this error  = {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-        print(f"<<<<< this error  = {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return ValidatorFactory.get_validator(receipt_client)
+    except ValueError as e:
+        logger.error(f"Validator not found for client: {receipt_client}, error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 
+@retry(wait=wait_fixed(2), stop=stop_after_attempt(3))
 def analyze_document(file_data: bytes) -> dict:
     boto_client = boto3.client(
         "textract",
@@ -118,5 +111,37 @@ def analyze_document(file_data: bytes) -> dict:
             },
         )
     except (BotoCoreError, ClientError) as e:
-        logger.error(f"BotoCoreError in analyze_document: {str(e)}")
+        logger.error(f"Error in Textract analysis: {str(e)}")
         raise e
+
+
+def save_response_and_return_result(
+    db: Session,
+    ocr_raw: dict,
+    validator_response: dict,
+    keras_label: str,
+    keras_prediction: float,
+    data: ReceiptData,
+) -> ReceiptApproverResponse:
+    bind_engine = db.get_bind()
+    logger.info(
+        f"<<<<<<<< Engine URL: {bind_engine.url} Is Engine In-Memory: {'sqlite' in bind_engine.url.drivername and ':memory:' in str(bind_engine.url)}"
+    )
+    # Use SQLAlchemy inspector to get the list of tables
+    inspector = inspect(bind_engine)
+    tables = inspector.get_table_names()
+    logger.info(f"List of Tables: {tables}")
+
+    response = save_receipt_approver_response(
+        db,
+        ocr_raw,
+        validator_response,
+        data.receipt_client,
+        data,
+        {
+            "label": keras_label,
+            "confidence": float(keras_prediction),
+        },
+    )
+
+    return response

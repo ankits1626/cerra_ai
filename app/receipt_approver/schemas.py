@@ -1,7 +1,8 @@
+from datetime import datetime
 from typing import Dict, Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ReceiptData(BaseModel):
@@ -19,3 +20,15 @@ class ReceiptApproverResponseCreate(BaseModel):
     processed: Dict
     client: str
     receipt_classifier_response: Dict
+
+
+class ReceiptApproverResponseSchema(BaseModel):
+    id: Optional[UUID]
+    client: str
+    ocr_raw: dict
+    processed: dict
+    user_input_data: dict
+    receipt_classifier_response: Optional[dict]
+    last_updated: datetime
+
+    model_config = ConfigDict(from_attributes=True)

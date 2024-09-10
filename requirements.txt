@@ -13,11 +13,14 @@ psycopg2-binary==2.9.6
 pydantic==2.8.2
 python-dotenv==1.0.1
 python-json-logger==2.0.7
+pytest==8.3.2
+pytest-mock==3.14.0
 #R
 requests==2.32.3
 #S
 SQLAlchemy==2.0.20
 #t
 tensorflow==2.17.0
+tenacity==9.0.0
 #u
 uvicorn==0.30.5
