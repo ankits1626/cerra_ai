@@ -43,10 +43,14 @@ def validate_receipt(
 
     validator = get_validator(data.receipt_client)
     validator_response = validator.validate(data.model_dump(), ocr_raw)
-
-    return save_response_and_return_result(
+    retval = save_response_and_return_result(
         db, ocr_raw, validator_response, keras_label, keras_prediction, data
     )
+    # ReceiptApproverResponseSchema.from_orm(receipt_response)
+    receipt_response_schema = ReceiptApproverResponseSchema.from_orm_with_custom_fields(
+        retval
+    )
+    return receipt_response_schema
 
 
 def retrieve_existing_response(

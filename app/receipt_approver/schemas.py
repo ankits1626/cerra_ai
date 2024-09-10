@@ -24,11 +24,32 @@ class ReceiptApproverResponseCreate(BaseModel):
 
 class ReceiptApproverResponseSchema(BaseModel):
     id: Optional[UUID]
-    client: str
-    ocr_raw: dict
-    processed: dict
-    user_input_data: dict
-    receipt_classifier_response: Optional[dict]
+    receipt_number: str
+    receipt_date: str
+    brand: str
+    receipt_type: dict
+    validation_result: dict
     last_updated: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+    @classmethod
+    def from_orm_with_custom_fields(cls, orm_obj):
+        """
+        This custom class method will handle the conversion of SQLAlchemy fields
+        to Pydantic model fields where names do not match.
+        """
+        # Manually mapping fields
+        return cls(
+            id=orm_obj.id,
+            receipt_number=orm_obj.user_input_data.get(
+                "receipt_number"
+            ),  # Extract from JSON
+            receipt_date=orm_obj.user_input_data.get(
+                "receipt_date"
+            ),  # Extract from JSON
+            brand=orm_obj.user_input_data.get("brand"),  # Extract from JSON
+            receipt_type=orm_obj.receipt_classifier_response,  # Maps directly
+            validation_result=orm_obj.processed,  # Maps directly
+            last_updated=orm_obj.last_updated,
+        )

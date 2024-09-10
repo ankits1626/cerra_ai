@@ -54,9 +54,6 @@ def test_validate_receipt_success(
     assert response.status_code == 200
     response_json = response.json()
     logger.info(f"******** response_json = {response_json}")
-    assert (
-        response_json["user_input_data"]["receipt_number"]
-        == receipt_data["receipt_number"]
-    )
-    assert response_json["receipt_classifier_response"]["label"] == "Printed"
-    assert response_json["processed"] == {"validation": "success"}
+    assert response_json["receipt_number"] == receipt_data["receipt_number"]
+    assert response_json["receipt_type"]["label"] == "Printed"
+    assert response_json["validation_result"] == {"validation": "success"}
