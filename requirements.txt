@@ -4,6 +4,8 @@ alembic==1.11.1
 boto3==1.34.154
 #F
 fastapi==0.112.0
+#H
+httpx==0.27.2
 #O
 openpyxl==3.1.5
 #P

@@ -27,7 +27,7 @@ class ReceiptApproverResponseSchema(BaseModel):
     receipt_number: str
     receipt_date: str
     brand: str
-    receipt_type: dict
+    receipt_type: Optional[dict]
     validation_result: dict
     last_updated: datetime
 

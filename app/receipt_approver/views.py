@@ -7,7 +7,6 @@ from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session
-from tenacity import retry, stop_after_attempt, wait_fixed
 
 from app.config.database import get_db
 from app.config.settings import settings
@@ -26,19 +25,13 @@ logger = logging.getLogger(__name__)
 def validate_receipt(
     request: Request, data: ReceiptData, db: Session = Depends(get_db)
 ):
-    client_ip = request.client.host
-    logger.info(
-        f"Received request from {client_ip} for receipt # {data.receipt_number} receipt date= {data.receipt_date} receipt client= {data.receipt_client}"
-    )
-
     existing_response = retrieve_existing_response(db, data.response_id)
     keras_label, keras_prediction = make_keras_prediction(data.encoded_receipt_file)
-    logger.info(
-        f"********** keras_label {keras_label} keras_prediction {keras_prediction} "
-    )
-    file_data = base64.b64decode(data.encoded_receipt_file)
+
     ocr_raw = (
-        existing_response.ocr_raw if existing_response else analyze_document(file_data)
+        existing_response.ocr_raw
+        if existing_response
+        else analyze_document(base64.b64decode(data.encoded_receipt_file))
     )
 
     validator = get_validator(data.receipt_client)
@@ -46,11 +39,7 @@ def validate_receipt(
     retval = save_response_and_return_result(
         db, ocr_raw, validator_response, keras_label, keras_prediction, data
     )
-    # ReceiptApproverResponseSchema.from_orm(receipt_response)
-    receipt_response_schema = ReceiptApproverResponseSchema.from_orm_with_custom_fields(
-        retval
-    )
-    return receipt_response_schema
+    return ReceiptApproverResponseSchema.from_orm_with_custom_fields(retval)
 
 
 def retrieve_existing_response(
@@ -73,18 +62,26 @@ def retrieve_existing_response(
 
 
 def make_keras_prediction(encoded_receipt_file: str):
-    val = predict_receipt_type(encoded_receipt_file)
-    logger.info(f"******* val =  {val}")
-    keras_label, keras_prediction = predict_receipt_type(encoded_receipt_file)
-
-    if not keras_label or keras_prediction is None:
-        logger.error("Keras model prediction failed")
-        raise HTTPException(status_code=500, detail="Receipt type prediction failed.")
-
-    logger.info(
-        f"Keras model predicted: {keras_label} with confidence {keras_prediction}"
-    )
-    return keras_label, keras_prediction
+    try:
+        # Get the label and prediction in a single call
+        keras_label, keras_prediction = predict_receipt_type(encoded_receipt_file)
+        logger.info(
+            f"Keras prediction: Label={keras_label}, Confidence={keras_prediction}"
+        )
+        if not keras_label or keras_prediction is None:
+            logger.warning("Keras model prediction failed")
+            return None, None
+        return keras_label, keras_prediction
+    except HTTPException as e:
+        # Re-raise the HTTP exception with more context if needed
+        logger.error(f"Prediction HTTPException: {e.detail}")
+        raise e
+    except Exception as e:
+        # General catch-all for unexpected errors
+        logger.error(f"Unexpected error during Keras model prediction: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail="Model prediction encountered an unexpected error."
+        )
 
 
 def get_validator(receipt_client: str):
@@ -95,7 +92,7 @@ def get_validator(receipt_client: str):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@retry(wait=wait_fixed(2), stop=stop_after_attempt(3))
+# @retry(wait=wait_fixed(2), stop=stop_after_attempt(3))
 def analyze_document(file_data: bytes) -> dict:
     boto_client = boto3.client(
         "textract",
@@ -116,7 +113,7 @@ def analyze_document(file_data: bytes) -> dict:
         )
     except (BotoCoreError, ClientError) as e:
         logger.error(f"Error in Textract analysis: {str(e)}")
-        raise e
+        raise HTTPException(status_code=500, detail=f"Textract error: {str(e)}")
 
 
 def save_response_and_return_result(
@@ -135,17 +132,26 @@ def save_response_and_return_result(
     inspector = inspect(bind_engine)
     tables = inspector.get_table_names()
     logger.info(f"List of Tables: {tables}")
+    try:
+        keras_prediction_data = (
+            {}
+            if keras_label is None or keras_prediction is None
+            else {
+                "label": keras_label,
+                "confidence": float(keras_prediction),
+            }
+        )
 
-    response = save_receipt_approver_response(
-        db,
-        ocr_raw,
-        validator_response,
-        data.receipt_client,
-        data,
-        {
-            "label": keras_label,
-            "confidence": float(keras_prediction),
-        },
-    )
+        response = save_receipt_approver_response(
+            db,
+            ocr_raw,
+            validator_response,
+            data.receipt_client,
+            data,
+            keras_prediction_data,
+        )
 
-    return response
+        return response
+    except Exception as e:
+        logger.error(f"Unable save response: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"{str(e)}")
