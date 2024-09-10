@@ -44,6 +44,13 @@ Technologies used:
 - pytest tests/ --log-cli-level=INFO (with logs)
 -  pytest tests/
 
+## Code Coverage
+- code coverage `pytest --cov=app tests/`
+- generate html coverage report : `pytest --cov=app --cov-report=html tests/`
+
+    This will create an `htmlcov` directory with an index.html file you can open in a browser to view the coverage details.
+    Open `htmlcov/index.html` in a browser to see line-by-line details of what was covered.
+
 ## Integration with Backend app
 in `skor/settings/default.py` add following setting 
 
