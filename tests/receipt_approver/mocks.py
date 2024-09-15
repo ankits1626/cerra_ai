@@ -10,10 +10,17 @@ def mock_keras_prediction(success=True):
     """
     Mocks the Keras prediction. If success is False, return None values to simulate a failure.
     """
-    return patch(
-        "app.receipt_approver.views.predict_receipt_type",
-        return_value=("Printed", 0.95) if success else (None, None),
-    )
+    # mock_textract_client = MagicMock()
+    if success:
+        return patch(
+            "app.receipt_approver.views.predict_receipt_type",
+            return_value=("Printed", 0.95) if success else (None, None),
+        )
+    else:
+        return patch(
+            "app.receipt_approver.views.predict_receipt_type",
+            side_effect=ValueError("Invalid receipt_client"),
+        )
 
 
 def mock_textract(success=True):

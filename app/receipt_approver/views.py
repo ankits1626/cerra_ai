@@ -39,14 +39,14 @@ def validate_receipt(
     - **ReceiptApproverResponseSchema**: Contains the validation result, OCR data, and prediction information.
     - Returns an HTTPException with error details if validation or processing fails.
     """
-
+    logger.info("<<<<<< validate_receipt called")
     existing_response = retrieve_existing_response(db, data.response_id)
     keras_label, keras_prediction = make_keras_prediction(data.encoded_receipt_file)
 
+    file_data = get_decoded_data(data.encoded_receipt_file)
+
     ocr_raw = (
-        existing_response.ocr_raw
-        if existing_response
-        else analyze_document(base64.b64decode(data.encoded_receipt_file))
+        existing_response.ocr_raw if existing_response else analyze_document(file_data)
     )
 
     validator = get_validator(data.receipt_client)
@@ -57,22 +57,30 @@ def validate_receipt(
     return ReceiptApproverResponseSchema.from_orm_with_custom_fields(retval)
 
 
+def get_decoded_data(encoded_data):
+    try:
+        return base64.b64decode(encoded_data)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Encoded image is Invalid.")
+
+
 def retrieve_existing_response(
     db: Session, response_id: Optional[str]
 ) -> Optional[ReceiptApproverResponse]:
+    logger.info(f"<<<<<< Fetch existing response_id called  for {response_id}")
     if not response_id:
         return None
-
+    logger.info(f"<<<<<< Fetch  {response_id}")
     try:
-        return (
+        retval = (
             db.query(ReceiptApproverResponse)
             .filter(ReceiptApproverResponse.id == response_id)
             .first()
         )
+        logger.info(f"<<<<<< successfully Fetch  {response_id} retval = {retval}")
+        return retval
     except Exception as e:
-        logger.warning(
-            f"Failed to retrieve existing response for ID {response_id}: {e}"
-        )
+        logger.info(f"Failed to retrieve existing response for ID {response_id}: {e}")
         return None
 
 
@@ -90,13 +98,11 @@ def make_keras_prediction(encoded_receipt_file: str):
     except HTTPException as e:
         # Re-raise the HTTP exception with more context if needed
         logger.error(f"Prediction HTTPException: {e.detail}")
-        raise e
+        return None, None
     except Exception as e:
         # General catch-all for unexpected errors
         logger.error(f"Unexpected error during Keras model prediction: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail="Model prediction encountered an unexpected error."
-        )
+        return None, None
 
 
 def get_validator(receipt_client: str):

@@ -42,6 +42,7 @@ Technologies used:
 ## Testing
 -  create a virual enviornment and install dependencies
 - pytest tests/ --log-cli-level=INFO (with logs)
+- pytest -s -v (with logs from code as well)
 -  pytest tests/
 
 ## Code Coverage

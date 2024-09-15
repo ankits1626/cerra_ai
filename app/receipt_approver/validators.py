@@ -1,6 +1,9 @@
+import itertools
+from datetime import datetime
 from typing import Dict
 
 import pandas as pd
+from dateutil.parser import ParserError
 
 from app.config.settings import settings
 
@@ -49,13 +52,61 @@ class LuxotticaReceiptValidator:
         return retval
 
     # validate receipt date
+    def generate_date_formats(self, date_str, input_format="%Y/%m/%d"):
+        date = datetime.strptime(date_str, input_format)
+
+        # Define different parts of the date to vary
+        year_variants = [
+            date.strftime("%Y"),
+            date.strftime("%y"),
+        ]  # Full year and short year
+        month_variants = [
+            date.strftime("%m"),
+            date.strftime("%-m"),
+            date.strftime("%b"),
+            date.strftime("%B"),
+        ]  # Month with/without leading zero, abbreviated, and full month name
+        day_variants = [
+            date.strftime("%d"),
+            date.strftime("%-d"),
+        ]  # Day with and without leading zero
+
+        # Define possible separators
+        separators = ["-", "/", ".", " ", ","]  # Common separators including a space
+
+        # Generate all possible combinations of year, month, day, and separators
+        possible_dates = set()
+
+        # Generate combinations with all possible positions
+        for year, month, day in itertools.product(
+            year_variants, month_variants, day_variants
+        ):
+            for sep1, sep2 in itertools.product(separators, repeat=2):
+                # Y-M-D
+                possible_dates.add(f"{year}{sep1}{month}{sep2}{day}")
+                # D-M-Y
+                possible_dates.add(f"{day}{sep1}{month}{sep2}{year}")
+                # M-D-Y
+                possible_dates.add(f"{month}{sep1}{day}{sep2}{year}")
+
+        return sorted(possible_dates)
+
     def validate_date(self, sop_df, blocks, user_input_value, input_dict):
-        # print(f"validate_date called date = {user_input_value}")
+        print(f"validate_date called date = {user_input_value}")
         retval = []
         for block in blocks:
             if block.block_type in ["LINE", "WORD", "QUERY_RESULT"]:
-                if block.has_user_input_date(user_input_value):
-                    retval.append(block)
+                try:
+                    date_variations = self.generate_date_formats(
+                        user_input_value, input_format="%d/%m/%y"
+                    )
+                    # print("<<<<< date variations = {date_variations}")
+                    if block.has_user_input_date(user_input_value, date_variations):
+                        retval.append(block)
+                except (ValueError, OverflowError, ParserError):
+                    #     # Return the original date string if parsing fails
+                    print("exception occured during date")
+                    return retval
         print(f"validate_date called \n {retval} \n")
         return retval
 

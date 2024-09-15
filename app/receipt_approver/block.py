@@ -1,6 +1,5 @@
 import datetime
 
-from dateutil import parser
 from dateutil.parser import ParserError
 
 from .utils import find_row_by_code, split_string
@@ -53,27 +52,13 @@ class Block:
             # Return False if parsing fails
             return self.text
 
-    def has_user_input_date(self, user_input_date):
-        pre = self.text
-        self.text = self.reformat_ocr_date()
-
-        try:
-            # Parse the date string using dateutil.parser
-            parsed_date = parser.parse(self.text, dayfirst=True)
-            # Return the date formatted as 'D/M/YYYY' i.e., day/month/year
-            # Format the date as 'D/M/YYYY' and 'M/D/YYYY'
-            formatted_dates = [
-                parsed_date.strftime("%-d/%-m/%y"),  # Day/Month/Year
-                parsed_date.strftime("%-m/%-d/%y"),  # Month/Day/Year
-            ]
-            # print(
-            #     f"******** has_user_input_dat euser_input_date ={user_input_date} --- pre = {pre} --- text = {self.text} --- formatted_dates ={formatted_dates}"
-            # )
-            # print(f'text = {self.text} formatted_date = {formatted_dates} user_input_date = {user_input_date}')
-            return user_input_date in formatted_dates
-        except (ValueError, OverflowError, ParserError):
-            # Return the original date string if parsing fails
-            return False
+    def has_user_input_date(self, user_input_date, date_variations):
+        self.text = self.text.replace(", ", ",").replace("/ ", "/")
+        for variation in date_variations:
+            # self.append_to_file(f'<<<< comparing {variation} with {self.text}')
+            if variation in self.text:
+                return True
+        return False
 
     def special_check_for_brand_models(self, value, input_dict, sop_df):
         # brands like this 7178 2001

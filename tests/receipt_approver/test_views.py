@@ -23,6 +23,23 @@ receipt_data = {
 }
 
 
+def create_existing_receipt_response(db_session):
+    """
+    Creates an existing ReceiptApproverResponse in the database.
+    """
+    existing_response = ReceiptApproverResponse(
+        id=uuid.uuid4(),
+        client=receipt_data["receipt_client"],
+        user_input_data=receipt_data,
+        ocr_raw={"ocr_data": "fake_ocr_data"},
+        processed={"ai_inference": "fake_inference_data"},
+        receipt_classifier_response={"label": "Printed", "confidence": 0.95},
+    )
+    db_session.add(existing_response)
+    db_session.commit()
+    return existing_response
+
+
 @pytest.fixture
 def mock_external_dependencies():
     """
@@ -68,6 +85,7 @@ def test_validate_receipt_invalid_base64(client):
 
     # Assert the response is 400 Bad Request
     assert response.status_code == 400
+    assert response.json()["detail"] == "Encoded image is Invalid."
 
 
 def test_validate_receipt_keras_failure(client, mock_external_dependencies):
@@ -146,3 +164,90 @@ def test_validate_receipt_save_failure(
     # Assert that a 500 Internal Server Error is returned due to the save failure
     assert response.status_code == 500
     assert "Database save error" in response.json()["detail"]
+
+
+def test_validate_receipt_with_existing_response(
+    client, test_db, mock_external_dependencies
+):
+    """
+    Test case where the validate_receipt fetches an existing response from the database.
+    """
+    # Create an existing receipt approver response in the database
+    existing_response = create_existing_receipt_response(test_db)
+
+    # Include the response_id in the request payload to simulate fetching the existing response
+    receipt_data_with_response_id = receipt_data.copy()
+    receipt_data_with_response_id["response_id"] = str(existing_response.id)
+
+    # Make the request
+    response = client.post(
+        "/receipts/validate-receipt", json=receipt_data_with_response_id
+    )
+
+    # Assertions
+    assert response.status_code == 200
+    response_json = response.json()
+    assert response_json["receipt_number"] == receipt_data["receipt_number"]
+    assert (
+        response_json["receipt_type"]["label"] == "Printed"
+    )  # Mocked value from keras
+    assert response_json["validation_result"] == {
+        "validation": "success"
+    }  # Existing validation result
+
+
+def test_validate_receipt_exception_during_retrieve_existing_response(
+    client, mock_external_dependencies
+):
+    """
+    Test case where an exception is raised while retrieving an existing response.
+    """
+    # Mocking the `db.query().filter().first()` to raise an exception
+    with patch("sqlalchemy.orm.Session.query") as mock_query:
+        mock_query.side_effect = Exception("Database retrieval error")
+
+        # Make the request
+        receipt_data_with_response_id = receipt_data.copy()
+        receipt_data_with_response_id["response_id"] = str(
+            uuid.uuid4()
+        )  # Simulate a response_id in the request
+
+        response = client.post(
+            "/receipts/validate-receipt", json=receipt_data_with_response_id
+        )
+
+        # Assertions
+        assert (
+            response.status_code == 200
+        )  # The API should handle the exception and still proceed
+        response_json = response.json()
+        assert response_json["receipt_number"] == receipt_data["receipt_number"]
+        assert (
+            response_json["receipt_type"]["label"] == "Printed"
+        )  # Mocked value from keras
+        assert response_json["validation_result"] == {"validation": "success"}
+        logger.warning("Database retrieval error handled successfully.")
+
+
+def test_validate_receipt_exception_in_keras_prediction(
+    client, test_db, mock_external_dependencies
+):
+    """
+    Test case where an exception is raised in the `make_keras_prediction` function.
+    """
+    # Mocking the `predict_receipt_type` to raise an exception
+    # with patch(
+    #     "app.receipt_approver.model_utils.predict_receipt_type"
+    # ) as mock_keras_prediction:
+    with mock_keras_prediction(success=False):
+        mock_keras_prediction.side_effect = Exception("Keras prediction error")
+
+        # Make the request
+        response = client.post("/receipts/validate-receipt", json=receipt_data)
+
+        # Assertions
+        response_json = response.json()
+        logger.info(f"<<<<<<<<< response_json ={response_json}")
+        assert response.status_code == 200
+
+        assert response_json["validation_result"] == {"validation": "success"}
