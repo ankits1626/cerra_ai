@@ -50,6 +50,16 @@ def mock_external_dependencies():
     logger.info("Teardown complete: Mocks destroyed")
 
 
+@pytest.fixture
+def mock_external_dependencies_excluding():
+    """
+    Conditional mocking of external dependencies like Keras, Textract, and Validator.
+    """
+    with mock_keras_prediction(), mock_textract():
+        yield
+    logger.info("Teardown complete: Mocks destroyed")
+
+
 def test_validate_receipt_success(client, mock_external_dependencies):
     response = client.post("/receipts/validate-receipt", json=receipt_data)
     assert response.status_code == 200
@@ -251,3 +261,9 @@ def test_validate_receipt_exception_in_keras_prediction(
         assert response.status_code == 200
 
         assert response_json["validation_result"] == {"validation": "success"}
+
+
+def test_invalid_client_error(client, mock_external_dependencies_excluding):
+    response = client.post("/receipts/validate-receipt", json=receipt_data)
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid receipt_client"

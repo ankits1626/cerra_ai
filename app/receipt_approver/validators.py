@@ -12,8 +12,7 @@ from .utils import (
 
 
 class ReceiptValidator:
-    def validate(self) -> bool:
-        raise NotImplementedError("Subclasses should implement this method.")
+    pass
 
 
 class LuxotticaReceiptValidator(ReceiptValidator):

@@ -24,10 +24,11 @@ class Block:
         return self.text
 
     def get_bounding_box(self, image_width, image_height):
-        bounding_box = self.geometry.get("BoundingBox", {})
-        # image_width = 800  # Example image width (replace with actual image width)
-        # image_height = 600  # Example image height (replace with actual image height)
+        # Ensure valid dimensions
+        if image_width <= 0 or image_height <= 0:
+            raise ValueError("Image dimensions must be greater than zero.")
 
+        bounding_box = self.geometry.get("BoundingBox", {})
         left = bounding_box.get("Left", 0.0) * image_width
         top = bounding_box.get("Top", 0.0) * image_height
         width = bounding_box.get("Width", 0.0) * image_width
