@@ -91,9 +91,6 @@ def make_keras_prediction(encoded_receipt_file: str):
         logger.info(
             f"Keras prediction: Label={keras_label}, Confidence={keras_prediction}"
         )
-        if not keras_label or keras_prediction is None:
-            logger.warning("Keras model prediction failed")
-            return None, None
         return keras_label, keras_prediction
     except HTTPException as e:
         # Re-raise the HTTP exception with more context if needed
