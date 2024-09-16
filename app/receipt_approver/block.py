@@ -1,10 +1,3 @@
-import datetime
-
-from dateutil.parser import ParserError
-
-from .utils import find_row_by_code, split_string
-
-
 class Block:
     def __init__(self, block_data):
         self.id = block_data.get("Id", "")
@@ -19,130 +12,16 @@ class Block:
         filtered_geometry = {k: v for k, v in self.geometry.items() if k != "Polygon"}
 
         return {
-            "id": self.id,
-            "block_type": self.block_type,
-            "text": self.text,
+            "Id": self.id,
+            "BlockType": self.block_type,
+            "Text": self.text,
             "normalized_text": self.normalized_text,
-            "geometry": filtered_geometry,
+            "Geometry": filtered_geometry,
             # "relationships": self.relationships,
         }
 
     def __str__(self) -> str:
         return self.text
-
-    # Check if the text is not a date
-    def is_not_date(self, text):
-        try:
-            datetime.datetime.strptime(text, "%Y-%m-%d")  # Specify the date format here
-            return False  # It is a valid date
-        except ValueError:
-            return True  # Not a valid date
-
-    def reformat_ocr_date(self):
-        try:
-            # Extract the date part from the text by splitting on whitespace
-            # Assuming date is the first part of the text
-            date_part = self.text.split()[0]
-            # print(f'^^^^^^^ text = {self.text} date_part = {date_part} ')
-
-            # Return True if user_input_date is in formatted_dates
-            return self.text if self.is_not_date(date_part) else date_part
-
-        except (ValueError, OverflowError, ParserError):
-            # Return False if parsing fails
-            return self.text
-
-    def has_user_input_date(self, user_input_date, date_variations):
-        self.text = self.text.replace(", ", ",").replace("/ ", "/")
-        for variation in date_variations:
-            # self.append_to_file(f'<<<< comparing {variation} with {self.text}')
-            if variation in self.text:
-                return True
-        return False
-
-    def special_check_for_brand_models(self, value, input_dict, sop_df):
-        # brands like this 7178 2001
-        # print(f'<<<<<<< special_check_for_brand_models for {value}')
-
-        splits = value.strip().split(" ")
-
-        retval = False
-        for part in splits:
-            if part not in self.text:
-                retval = False
-                break
-            else:
-                retval = True
-
-        if not retval:
-            # lets check if brand models is like RB5315D
-            splits = split_string(value)
-
-            if splits and len(splits) == 2:
-                row = find_row_by_code(sop_df, value)
-                user_entered_brand = input_dict.get("brand", None)
-                # print(
-                #     f"~~~~~~~ splits = {splits}  user_entered_brand ={user_entered_brand}"
-                # )
-                if row and user_entered_brand:
-                    # print(
-                    #     f" row = {row} ------ user_entered_brand {user_entered_brand}"
-                    # )
-                    user_entered_brand = user_entered_brand.lower().replace("-", "")
-                    brand_matches = False
-
-                    brands = row["OCR_VALUE"]
-                    for brand in brands:
-                        if brand.lower() == user_entered_brand:
-                            brand_matches = True
-                            break
-                    code_found_in_ocr = splits[1].lower() in self.text.lower()
-                    return brand_matches and code_found_in_ocr
-
-        return retval
-
-    def check_for_brand(self, input_dict, sop_df):
-        user_input_brand = input_dict["brand"].strip()
-        matching_row = sop_df[sop_df["Brand"] == user_input_brand]
-        # print(
-        #     f"text = {self.text.lower()} ***** user_input_brand = {user_input_brand} **** matching_row = {matching_row}"
-        # )
-
-        ocr_brands = matching_row["OCR_VALUE"].values.tolist()
-
-        if len(ocr_brands) > 0:
-            ocr_brands = matching_row["OCR_VALUE"].values.tolist()[0]
-
-        else:
-            return False
-        ocr_brands = [elem.lower() for elem in ocr_brands]
-
-        for brand in ocr_brands:
-            if brand.lower() in self.text.lower():
-                print(
-                    f"text = {self.text.lower()} ***** user_input_brand = {user_input_brand} **** ocr_brands = {ocr_brands}"
-                )
-                return True
-        return False
-
-    def has_value(self, sop_df, value, input_dict=None, key=None):
-        original_value = value
-        text = self.normalized_text.replace(" ", "").replace("-", "").lower()
-        if self.is_not_date(text):
-            text = text.replace("/", "")
-
-        value = value.replace("-", "").replace(" ", "").lower()
-        # if value == 'poc24005199':
-        #     print(f'value = {value}, text ={text} match = {value in text}')
-        retval = value in text
-        if key == "brand_model" and not retval:
-            return self.special_check_for_brand_models(
-                original_value, input_dict, sop_df
-            )
-
-        if key == "brand" and not retval:
-            return self.check_for_brand(input_dict, sop_df)
-        return retval
 
     def get_bounding_box(self, image_width, image_height):
         bounding_box = self.geometry.get("BoundingBox", {})

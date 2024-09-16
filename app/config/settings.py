@@ -15,6 +15,10 @@ class Settings:
     def lux_sop_filepath(self):
         return os.path.join(self.DATA_PATH, "sops", "luxottica", self.LUX_SOP_FILENAME)
 
+    @property
+    def lux_receipt_date_format(self):
+        return "%d/%m/%y"  # "01/01/24"
+
     # Database configurations
     DB_USER: str = os.getenv("DB_USER")
     DB_PASSWORD: str = os.getenv("DB_PASSWORD")

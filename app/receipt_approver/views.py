@@ -1,6 +1,6 @@
 import base64
 import logging
-from typing import Optional
+from typing import Dict, Optional
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -49,8 +49,8 @@ def validate_receipt(
         existing_response.ocr_raw if existing_response else analyze_document(file_data)
     )
 
-    validator = get_validator(data.receipt_client)
-    validator_response = validator.validate(data.model_dump(), ocr_raw)
+    validator = get_validator(data.receipt_client, data.model_dump(), ocr_raw)
+    validator_response = validator.validate()
     retval = save_response_and_return_result(
         db, ocr_raw, validator_response, keras_label, keras_prediction, data
     )
@@ -105,9 +105,9 @@ def make_keras_prediction(encoded_receipt_file: str):
         return None, None
 
 
-def get_validator(receipt_client: str):
+def get_validator(receipt_client: str, user_input: Dict, response: Dict):
     try:
-        return ValidatorFactory.get_validator(receipt_client)
+        return ValidatorFactory.get_validator(receipt_client, user_input, response)
     except ValueError as e:
         logger.error(f"Validator not found for client: {receipt_client}, error: {e}")
         raise HTTPException(status_code=400, detail=str(e))

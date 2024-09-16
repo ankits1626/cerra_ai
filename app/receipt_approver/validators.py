@@ -1,210 +1,144 @@
-import itertools
-from datetime import datetime
-from typing import Dict
-
-import pandas as pd
-from dateutil.parser import ParserError
+from typing import Dict, List
 
 from app.config.settings import settings
 
 from .block import Block
-from .utils import find_row_by_code, is_string_in_array_case_insensitive
+from .utils import (
+    find_brand_by_code,
+    find_brand_user_input,
+    generate_date_formats,
+    get_model_code,
+)
 
 
 class ReceiptValidator:
-    def validate(self, input_dict: Dict, response: Dict) -> bool:
+    def validate(self) -> bool:
         raise NotImplementedError("Subclasses should implement this method.")
 
 
-class LuxotticaReceiptValidator:
-    # load luxottica SOP
-    def _load_sop(self):
-        # Read the Excel file
-        file_path = settings.lux_sop_filepath
-        # print(f"<<<<<<<< sop file_path = {file_path}")
-        df = pd.read_excel(file_path, sheet_name="Brand List")
+class LuxotticaReceiptValidator(ReceiptValidator):
+    def __init__(self, user_input_dict: Dict, response: Dict) -> None:
+        self.user_input_dict = user_input_dict
+        self.blocks = [Block(block_data) for block_data in response["Blocks"]]
 
-        # Select specific rows and columns
-        sop_df = df[["Brand", "OCR_VALUE", "Code"]]
-        sop_df
-        # Convert OCR_VALUE to an array of strings
-        sop_df["OCR_VALUE"] = sop_df["OCR_VALUE"].apply(lambda x: [x.replace("-", "")])
+    def _normalize_text(self, text: str) -> str:
+        """Normalize text by removing spaces, dashes, and converting to lowercase."""
+        return text.replace(" ", "").replace("-", "").replace("/", "").lower()
 
-        # Convert Code to an array of strings, treating '/' as a delimiter
-        # sop_df["Code"] = sop_df["Code"].apply(lambda x: x.split("/"))
-        sop_df["Code"] = sop_df["Code"].apply(
-            lambda x: [part.strip() for part in x.split("/")]
+    def _get_matching_blocks(
+        self, normalized_value: str, block_types: List[str]
+    ) -> List[Block]:
+        """Return blocks where the normalized text matches the provided value."""
+        return [
+            block
+            for block in self.blocks
+            if block.block_type in block_types
+            and normalized_value in self._normalize_text(block.normalized_text)
+        ]
+
+    def _validate_field(self, field_key: str, block_types: List[str]) -> List[Block]:
+        """Generic validation method for fields like receipt number, brand model, etc."""
+        normalized_field_value = self._normalize_text(self.user_input_dict[field_key])
+        return self._get_matching_blocks(normalized_field_value, block_types)
+
+    # Validate receipt number
+    def validate_receipt_number(self) -> List[Block]:
+        return self._validate_field("receipt_number", ["LINE", "WORD"])
+
+    # Validate receipt date
+    def validate_date(self) -> List[Block]:
+        user_entered_date_variations = generate_date_formats(
+            self.user_input_dict["receipt_date"],
+            input_format=settings.lux_receipt_date_format,
         )
+        return [
+            block
+            for block in self.blocks
+            if block.block_type in ["LINE", "WORD", "QUERY_RESULT"]
+            and any(
+                variation in block.text.replace(", ", ",").replace("/ ", "/")
+                for variation in user_entered_date_variations
+            )
+        ]
 
-        sop_df
-        return sop_df
-
-    # validate receipt id
-    def validate_receipt_number(self, sop_df, blocks, user_input_value, input_dict):
-        retval = []
-        # print(f"user_input_receipt_number = {user_input_value}")
-        for block in blocks:
-            if block.block_type in ["LINE", "WORD"]:
-                if block.has_value(
-                    sop_df, user_input_value, input_dict, "receipt_number"
-                ):
-                    retval.append(block)
-        return retval
-
-    # validate receipt date
-    def generate_date_formats(self, date_str, input_format="%Y/%m/%d"):
-        date = datetime.strptime(date_str, input_format)
-
-        # Define different parts of the date to vary
-        year_variants = [
-            date.strftime("%Y"),
-            date.strftime("%y"),
-        ]  # Full year and short year
-        month_variants = [
-            date.strftime("%m"),
-            date.strftime("%-m"),
-            date.strftime("%b"),
-            date.strftime("%B"),
-        ]  # Month with/without leading zero, abbreviated, and full month name
-        day_variants = [
-            date.strftime("%d"),
-            date.strftime("%-d"),
-        ]  # Day with and without leading zero
-
-        # Define possible separators
-        separators = ["-", "/", ".", " ", ","]  # Common separators including a space
-
-        # Generate all possible combinations of year, month, day, and separators
-        possible_dates = set()
-
-        # Generate combinations with all possible positions
-        for year, month, day in itertools.product(
-            year_variants, month_variants, day_variants
-        ):
-            for sep1, sep2 in itertools.product(separators, repeat=2):
-                # Y-M-D
-                possible_dates.add(f"{year}{sep1}{month}{sep2}{day}")
-                # D-M-Y
-                possible_dates.add(f"{day}{sep1}{month}{sep2}{year}")
-                # M-D-Y
-                possible_dates.add(f"{month}{sep1}{day}{sep2}{year}")
-
-        return sorted(possible_dates)
-
-    def validate_date(self, sop_df, blocks, user_input_value, input_dict):
-        print(f"validate_date called date = {user_input_value}")
-        retval = []
-        for block in blocks:
-            if block.block_type in ["LINE", "WORD", "QUERY_RESULT"]:
-                try:
-                    date_variations = self.generate_date_formats(
-                        user_input_value, input_format="%d/%m/%y"
-                    )
-                    # print("<<<<< date variations = {date_variations}")
-                    if block.has_user_input_date(user_input_value, date_variations):
-                        retval.append(block)
-                except (ValueError, OverflowError, ParserError):
-                    #     # Return the original date string if parsing fails
-                    print("exception occured during date")
-                    return retval
-        print(f"validate_date called \n {retval} \n")
-        return retval
-
-    # validate brand
+    # Clean up brand input
     def clean_up_user_input_brand(self, text: str) -> str:
-        # Remove '- Sunglasses' and '- Optical' if present
-        text = text.replace("- Sunglasses", "").replace("- Optical", "")
-        return text.strip()
+        return text.replace("- Sunglasses", "").replace("- Optical", "").strip()
 
-    def validate_brand(
-        self, sop_df, blocks, user_input_value, input_dict, validated_brand_model_blocks
-    ):
-        user_input_value = self.clean_up_user_input_brand(user_input_value)
-        # print(f"validate_brand called brand = {user_input_value}")
-        retval = []
-        for block in blocks:
-            if block.block_type in ["LINE", "WORD"]:
-                if block.has_value(sop_df, user_input_value, input_dict, "brand"):
-                    retval.append(block)
-        if len(retval) == 0 and len(validated_brand_model_blocks) > 0:
-            user_input_brand_model = input_dict["brand_model"]
-            row_containing_brand_code = find_row_by_code(sop_df, user_input_brand_model)
-            ocr_brand_value = row_containing_brand_code.get("OCR_VALUE", None)
-            user_entered_brand = user_input_value.lower().replace("-", "")
-            if ocr_brand_value and is_string_in_array_case_insensitive(
-                user_entered_brand, ocr_brand_value
-            ):
-                retval.append(validated_brand_model_blocks[0])
+    # Validate brand
+    def validate_brand(self, validated_brand_model_blocks: List[Block]) -> List[Block]:
+        """Validate the brand by comparing the user input and checking for matches."""
+        user_input_brand = self.clean_up_user_input_brand(self.user_input_dict["brand"])
+        brand = find_brand_user_input(user_input_brand)
 
-        return retval
+        if brand:
+            normalized_user_input_brand = self._normalize_text(brand)
 
-    # if not able to validate brand then validate brand via brand model
-    def validate_brand_models(self, sop_df, blocks, user_input_value, input_dict):
-        retval = []
-        for block in blocks:
-            if block.block_type in ["LINE", "WORD"]:
-                if block.has_value(sop_df, user_input_value, input_dict, "brand_model"):
-                    retval.append(block)
-        return retval
+            # Find matching blocks for the normalized user input brand
+            matching_blocks = self._get_matching_blocks(
+                normalized_user_input_brand, ["LINE", "WORD"]
+            )
 
-    def validate(self, input_dict: Dict, response: Dict) -> bool:
-        print("<<<<<<<< LuxotticaReceiptValidator: validate ")
-        sop_df = self._load_sop()
-        # print(sop_df)
-        blocks = [Block(block_data) for block_data in response["Blocks"]]
-        result = {}
-        # date
-        m_receipt_date_blocks = self.validate_date(
-            sop_df, blocks, input_dict["receipt_date"], input_dict
-        )
-        result["receipt_date"] = {
-            "user_input": input_dict["receipt_date"],
-            "detected": [
-                block.to_dict()
-                for block in m_receipt_date_blocks  # extract_key_of_interest_from_blocks(m_receipt_date_blocks)
-            ],
-        }
-        # receipt number
-        m_receipt_number = self.validate_receipt_number(
-            sop_df, blocks, input_dict["receipt_number"], input_dict
-        )
-        result["receipt_number"] = {
-            "user_input": input_dict["receipt_number"],
-            "detected": [
-                block.to_dict()
-                for block in m_receipt_number  # extract_key_of_interest_from_blocks(m_receipt_number)
-            ],
-        }
-        # brand_model
-        m_brand_model = self.validate_brand_models(
-            sop_df, blocks, input_dict["brand_model"], input_dict
-        )
-        result["brand_model"] = {
-            "user_input": input_dict["brand_model"],
-            "detected": [
-                block.to_dict()
-                for block in m_brand_model  # extract_key_of_interest_from_blocks(m_brand_model)
-            ],
-        }
-        # # brand
-        m_brand = self.validate_brand(
-            sop_df, blocks, input_dict["brand"], input_dict, m_brand_model
-        )
-        result["brand"] = {
-            "user_input": input_dict["brand"],
-            "detected": [block.to_dict() for block in m_brand],
-        }  # extract_key_of_interest_from_blocks(m_brand)
-        # Determine AI_APPROVED_STATUS based on the validation results
-        if (
-            result["receipt_date"]["detected"]
-            and result["receipt_number"]["detected"]
-            and result["brand"]["detected"]
-            and len(result["receipt_date"]["detected"]) > 0
-            and len(result["receipt_number"]["detected"]) > 0
-            and len(result["brand"]["detected"]) > 0
-        ):
-            result["AI_APPROVED_STATUS"] = {"detected": "Approved"}
+            # If no matching blocks are found and there are validated brand model blocks, check for model-based brand codes
+            if not matching_blocks and validated_brand_model_blocks:
+                for model_block in validated_brand_model_blocks:
+                    model_code_splits = get_model_code(model_block.text)
+
+                    # Ensure that model_code_splits is not empty or None
+                    if model_code_splits:
+                        brand_code = model_code_splits[0].upper()
+                        brand_from_code = find_brand_by_code(brand_code)
+
+                        # If a brand is found via the brand code and it matches the user input brand, return the model block
+                        if (
+                            brand_from_code
+                            and self._normalize_text(brand_from_code)
+                            == normalized_user_input_brand
+                        ):
+                            return [model_block]
+
+            return matching_blocks
         else:
-            result["AI_APPROVED_STATUS"] = {"detected": "Rejected"}
-        # print(f"result = {result}")
+            return []
+
+    # Validate brand models
+    def validate_brand_models(self) -> List[Block]:
+        return self._validate_field("brand_model", ["LINE", "WORD"])
+
+    # Validate all fields and return results
+    def validate(self) -> Dict:
+        validated_brands = self.validate_brand_models()
+        result = {
+            "receipt_date": {
+                "user_input": self.user_input_dict["receipt_date"],
+                "detected": [block.to_dict() for block in self.validate_date()],
+            },
+            "receipt_number": {
+                "user_input": self.user_input_dict["receipt_number"],
+                "detected": [
+                    block.to_dict() for block in self.validate_receipt_number()
+                ],
+            },
+            "brand_model": {
+                "user_input": self.user_input_dict["brand_model"],
+                "detected": [block.to_dict() for block in validated_brands],
+            },
+            "brand": {
+                "user_input": self.user_input_dict["brand"],
+                "detected": [
+                    block.to_dict() for block in self.validate_brand(validated_brands)
+                ],
+            },
+        }
+
+        # Determine AI_APPROVED_STATUS
+        result["AI_APPROVED_STATUS"] = {
+            "detected": "Approved"
+            if all(
+                result[key]["detected"]
+                for key in ["receipt_date", "receipt_number", "brand"]
+            )
+            else "Rejected"
+        }
+
         return result
