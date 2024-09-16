@@ -28,7 +28,7 @@ def preprocess_image_from_base64(encoded_img, target_size=(224, 224)):
         img_array = np.expand_dims(img_array, axis=0)
         img_array /= 255.0  # Rescale the image to [0, 1]
         return img_array
-    except (base64.binascii.Error, OSError) as e:
+    except (base64.binascii.Error, OSError, Exception) as e:
         logger.error(f"Error while processing the image: {str(e)}")
         raise HTTPException(status_code=400, detail="Invalid image format.")
 

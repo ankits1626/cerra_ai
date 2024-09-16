@@ -22,7 +22,7 @@ def test_get_mode_code_for_valid_code():
 
 def test_get_mode_code_for_invalid_code():
     result = get_model_code("732")
-    assert result == None
+    assert result is None
 
 
 def test_find_brand_by_code_for_valid_code():
@@ -34,4 +34,4 @@ def test_find_brand_by_code_for_valid_code():
 
 def test_find_brand_by_code_for_invalid_code():
     result = find_brand_by_code("xyz")
-    assert result == None
+    assert result is None
