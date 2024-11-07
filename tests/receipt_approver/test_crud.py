@@ -1,5 +1,4 @@
 import logging
-import uuid
 
 from app.receipt_approver.crud import (
     create_user_input_data,
@@ -15,6 +14,7 @@ logger = logging.getLogger(__name__)
 def test_create_user_input_data():
     # Mock receipt_data
     receipt_data = ReceiptData(
+        receipt_id="1234",
         receipt_number="123",
         receipt_date="2024-09-01",
         brand="BrandX",
@@ -29,6 +29,7 @@ def test_create_user_input_data():
     logger.info(f"result = {result}")
     # Check the result
     assert result == {
+        "receipt_id": 1234,
         "receipt_number": "123",
         "receipt_date": "2024-09-01",
         "brand": "BrandX",
@@ -39,7 +40,7 @@ def test_create_user_input_data():
 def test_get_existing_response(test_db):
     # Insert mock data into the test database
     new_response = ReceiptApproverResponse(
-        id=uuid.uuid4(),
+        receipt_id=123456,
         client="clientX",
         ocr_raw={"key": "value"},
         processed={"key": "processed_value"},
@@ -50,9 +51,9 @@ def test_get_existing_response(test_db):
     test_db.commit()
 
     # Test if get_existing_response returns the correct result
-    response = get_existing_response(test_db, new_response.id)
+    response = get_existing_response(test_db, new_response.receipt_id)
     logger.info(f"response = {response}")
-    assert response.id == new_response.id
+    assert response.receipt_id == new_response.receipt_id
     assert response.client == "clientX"
     assert response.ocr_raw == {"key": "value"}
     assert response.processed == {"key": "processed_value"}
@@ -64,6 +65,7 @@ def test_get_existing_response(test_db):
 def test_save_receipt_approver_response_new(test_db):
     # Mock receipt_data
     receipt_data = ReceiptData(
+        receipt_id=1234567,
         receipt_number="123",
         receipt_date="2024-09-01",
         brand="BrandX",
@@ -98,6 +100,7 @@ def test_save_receipt_approver_response_new(test_db):
 def test_save_receipt_approver_response_update(test_db):
     # Create an existing response in the database
     existing_response = ReceiptApproverResponse(
+        receipt_id=12345678,
         ocr_raw={"ocr": "old_data"},
         processed={"processed": "old_data"},
         client="clientX",
@@ -120,7 +123,7 @@ def test_save_receipt_approver_response_update(test_db):
         encoded_receipt_file="str",
         receipt_client="clientY",
         brand_model="ModelY",
-        response_id=existing_response.id,
+        receipt_id=existing_response.receipt_id,
     )
 
     # Call the main function to update the existing response
@@ -140,7 +143,7 @@ def test_save_receipt_approver_response_update(test_db):
     # Verify that the response in the database was updated
     updated_response = (
         test_db.query(ReceiptApproverResponse)
-        .filter_by(id=existing_response.id)
+        .filter_by(receipt_id=existing_response.receipt_id)
         .first()
     )
     assert updated_response is not None

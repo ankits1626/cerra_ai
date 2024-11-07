@@ -1,18 +1,21 @@
 from datetime import datetime
 from typing import Dict, Optional
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
 
+class FetchReceiptValidationDataRequest(BaseModel):
+    receipt_id: int
+
+
 class ReceiptData(BaseModel):
+    receipt_id: int  # this is unique identifier from django
     receipt_number: str
     receipt_date: str
     brand: str
     encoded_receipt_file: str
     receipt_client: str
     brand_model: str
-    response_id: Optional[UUID] = None
 
 
 class ReceiptApproverResponseCreate(BaseModel):
@@ -23,7 +26,7 @@ class ReceiptApproverResponseCreate(BaseModel):
 
 
 class ReceiptApproverResponseSchema(BaseModel):
-    id: Optional[UUID]
+    receipt_id: int
     receipt_number: str
     receipt_date: str
     brand: str
@@ -41,7 +44,7 @@ class ReceiptApproverResponseSchema(BaseModel):
         """
         # Manually mapping fields
         return cls(
-            id=orm_obj.id,
+            receipt_id=orm_obj.receipt_id,
             receipt_number=orm_obj.user_input_data.get(
                 "receipt_number"
             ),  # Extract from JSON

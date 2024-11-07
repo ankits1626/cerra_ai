@@ -8,19 +8,20 @@ from .schemas import ReceiptData
 logger = logging.getLogger(__name__)
 
 
-def get_existing_response(db: Session, response_id: int) -> ReceiptApproverResponse:
+def get_existing_response(db: Session, receipt_id: int) -> ReceiptApproverResponse:
     """
-    Fetch the existing ReceiptApproverResponse from the database based on response_id.
+    Fetch the existing ReceiptApproverResponse from the database based on receipt_id.
     """
     try:
         return (
             db.query(ReceiptApproverResponse)
-            .filter(ReceiptApproverResponse.id == response_id)
+            .filter(ReceiptApproverResponse.receipt_id == receipt_id)
             .first()
         )
     except Exception:
         logger.error(
-            f"Failed to retrieve existing response for ID {response_id}", exc_info=True
+            f"Failed to retrieve existing response for receipt {receipt_id}",
+            exc_info=True,
         )
         return None
 
@@ -30,6 +31,7 @@ def create_user_input_data(receipt_data: ReceiptData) -> dict:
     Create a dictionary for the user input data from receipt_data.
     """
     return {
+        "receipt_id": receipt_data.receipt_id,
         "receipt_number": receipt_data.receipt_number,
         "receipt_date": receipt_data.receipt_date,
         "brand": receipt_data.brand,
@@ -57,6 +59,7 @@ def update_existing_response(
 
 def save_new_response(
     db: Session,
+    receipt_id: int,
     ocr_raw: dict,
     processed: dict,
     client: str,
@@ -67,6 +70,7 @@ def save_new_response(
     Create a new ReceiptApproverResponse and add it to the session.
     """
     response = ReceiptApproverResponse(
+        receipt_id=receipt_id,
         ocr_raw=ocr_raw,
         processed=processed,
         client=client,
@@ -89,11 +93,7 @@ def save_receipt_approver_response(
     Main function to either update an existing response or save a new one.
     """
     user_input_data = create_user_input_data(receipt_data)
-    response = None
-
-    # Check if we are updating an existing response
-    if receipt_data.response_id:
-        response = get_existing_response(db, receipt_data.response_id)
+    response = get_existing_response(db, receipt_data.receipt_id)
 
     try:
         if response:
@@ -110,6 +110,7 @@ def save_receipt_approver_response(
             # Create a new response
             response = save_new_response(
                 db,
+                receipt_data.receipt_id,
                 ocr_raw,
                 processed,
                 client,

@@ -1,5 +1,3 @@
-import uuid
-
 from app.receipt_approver.models import ReceiptApproverResponse
 
 
@@ -10,7 +8,7 @@ def test_db_connection(test_db):
 
     # Insert a test record
     new_receipt = ReceiptApproverResponse(
-        id=uuid.uuid4(),
+        receipt_id=1312,
         client="Test Client",
         ocr_raw={"raw_data": "test_ocr"},
         processed={"processed_data": "test_processed"},

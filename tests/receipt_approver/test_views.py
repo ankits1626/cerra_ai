@@ -1,6 +1,5 @@
 import base64
 import logging
-import uuid
 from datetime import datetime
 from unittest.mock import patch
 
@@ -14,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 # Test data
 receipt_data = {
+    "receipt_id": 12222,
     "receipt_number": "12345",
     "receipt_client": "some_client",
     "receipt_date": "2024-09-10",
@@ -28,7 +28,7 @@ def create_existing_receipt_response(db_session):
     Creates an existing ReceiptApproverResponse in the database.
     """
     existing_response = ReceiptApproverResponse(
-        id=uuid.uuid4(),
+        receipt_id=receipt_data["receipt_id"],
         client=receipt_data["receipt_client"],
         user_input_data=receipt_data,
         ocr_raw={"ocr_data": "fake_ocr_data"},
@@ -84,6 +84,7 @@ def test_validate_receipt_missing_fields(client):
 def test_validate_receipt_invalid_base64(client):
     # Invalid base64 string
     invalid_data = {
+        "receipt_id": 1212,
         "receipt_number": "12345",
         "receipt_client": "some_client",
         "receipt_date": "2024-09-10",
@@ -118,6 +119,7 @@ def test_validate_receipt_validator_not_found(client, mock_external_dependencies
 
 
 def test_validate_receipt_textract_failure(client, mock_external_dependencies):
+    receipt_data["receipt_id"] = 1111
     # Conditional mocking: Simulate Textract failure
     with mock_textract(success=False):
         response = client.post("/receipts/validate-receipt", json=receipt_data)
@@ -139,7 +141,7 @@ def test_validate_receipt_saves_in_db(
 ):
     # Simulate save_receipt_approver_response returning an instance of ReceiptApproverResponse
     mock_response = ReceiptApproverResponse(
-        id=uuid.uuid4(),
+        receipt_id=121314,
         client="some_client",
         ocr_raw={"Blocks": [{"Text": "Sample OCR data"}]},
         processed={"validation": "success"},
@@ -157,7 +159,7 @@ def test_validate_receipt_saves_in_db(
     response_json = response.json()
 
     # Assert that the returned response matches the expected values
-    assert response_json["id"] == str(mock_response.id)  # UUID to string conversion
+    assert response_json["receipt_id"] == mock_response.receipt_id
     assert response_json["receipt_number"] == receipt_data["receipt_number"]
     assert response_json["receipt_type"]["label"] == "Printed"
     assert response_json["validation_result"] == {"validation": "success"}
@@ -186,12 +188,12 @@ def test_validate_receipt_with_existing_response(
     existing_response = create_existing_receipt_response(test_db)
 
     # Include the response_id in the request payload to simulate fetching the existing response
-    receipt_data_with_response_id = receipt_data.copy()
-    receipt_data_with_response_id["response_id"] = str(existing_response.id)
+    receipt_data_with_receipt_id = receipt_data.copy()
+    receipt_data_with_receipt_id["receipt_id"] = existing_response.receipt_id
 
     # Make the request
     response = client.post(
-        "/receipts/validate-receipt", json=receipt_data_with_response_id
+        "/receipts/validate-receipt", json=receipt_data_with_receipt_id
     )
 
     # Assertions
@@ -218,9 +220,10 @@ def test_validate_receipt_exception_during_retrieve_existing_response(
 
         # Make the request
         receipt_data_with_response_id = receipt_data.copy()
-        receipt_data_with_response_id["response_id"] = str(
-            uuid.uuid4()
-        )  # Simulate a response_id in the request
+        receipt_data_with_response_id["receipt_id"] = 45637
+        # receipt_data_with_response_id["response_id"] = str(
+        #     uuid.uuid4()
+        # )  # Simulate a response_id in the request
 
         response = client.post(
             "/receipts/validate-receipt", json=receipt_data_with_response_id

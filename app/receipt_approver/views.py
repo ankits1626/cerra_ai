@@ -14,11 +14,47 @@ from app.receipt_approver.crud import save_receipt_approver_response
 from app.receipt_approver.model_utils import predict_receipt_type
 from app.receipt_approver.models import ReceiptApproverResponse
 
-from .schemas import ReceiptApproverResponseSchema, ReceiptData
+from .schemas import (
+    FetchReceiptValidationDataRequest,
+    ReceiptApproverResponseSchema,
+    ReceiptData,
+)
 from .validator_factory import ValidatorFactory
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+@router.get("/receipt-validation-data", response_model=ReceiptApproverResponseSchema)
+def get_receipt_validation_data(
+    request: Request,
+    data: FetchReceiptValidationDataRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Fetch validation data of a receipt based on its receipt id
+    ### Input:
+    - FetchReceiptValidationDataRequest model encapsulating the receipt_id
+    ### Output:
+    - **ReceiptApproverResponseSchema**: Contains the validation result, OCR data,
+        and prediction information.
+    - Returns an HTTPException with error details if receipt not found.
+    """
+    # Example filtering based on criteria in ReceiptValidationRequest
+    receipt = (
+        db.query(ReceiptApproverResponse)
+        .filter(ReceiptApproverResponse.receipt_id == data.receipt_id)
+        .first()
+    )
+
+    # Check if the receipt was found
+    if receipt is None:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+
+    # Convert SQLAlchemy model to Pydantic schema
+    response_data = ReceiptApproverResponseSchema.from_orm_with_custom_fields(receipt)
+
+    return response_data
 
 
 @router.post("/validate-receipt", response_model=ReceiptApproverResponseSchema)
@@ -26,21 +62,23 @@ def validate_receipt(
     request: Request, data: ReceiptData, db: Session = Depends(get_db)
 ):
     """
-    Validates a receipt by processing its OCR data, making a receipt type prediction, and applying custom validation rules.
+    Validates a receipt by processing its OCR data, making a receipt type prediction,
+    and applying custom validation rules.
 
     ### Input:
     - ReceiptData model containing the receipt information such as:
-      - **receipt_number**: The unique identifier of the receipt.
+      - **receipt_id**: The unique identifier of the receipt.
+      - **receipt_number**: receipt number entered by user.
       - **receipt_date**: The date the receipt was issued.
       - **receipt_client**: The client for which the receipt validation is being processed.
       - **encoded_receipt_file**: Base64-encoded string of the receipt image.
 
     ### Output:
-    - **ReceiptApproverResponseSchema**: Contains the validation result, OCR data, and prediction information.
+    - **ReceiptApproverResponseSchema**: Contains the validation result, OCR data,
+        and prediction information.
     - Returns an HTTPException with error details if validation or processing fails.
     """
-    logger.info("<<<<<< validate_receipt called")
-    existing_response = retrieve_existing_response(db, data.response_id)
+    existing_response = retrieve_existing_response(db, data.receipt_id)
     keras_label, keras_prediction = make_keras_prediction(data.encoded_receipt_file)
 
     file_data = get_decoded_data(data.encoded_receipt_file)
@@ -65,22 +103,19 @@ def get_decoded_data(encoded_data):
 
 
 def retrieve_existing_response(
-    db: Session, response_id: Optional[str]
+    db: Session, receipt_id: int
 ) -> Optional[ReceiptApproverResponse]:
-    logger.info(f"<<<<<< Fetch existing response_id called  for {response_id}")
-    if not response_id:
-        return None
-    logger.info(f"<<<<<< Fetch  {response_id}")
     try:
         retval = (
             db.query(ReceiptApproverResponse)
-            .filter(ReceiptApproverResponse.id == response_id)
+            .filter(ReceiptApproverResponse.receipt_id == receipt_id)
             .first()
         )
-        logger.info(f"<<<<<< successfully Fetch  {response_id} retval = {retval}")
         return retval
     except Exception as e:
-        logger.info(f"Failed to retrieve existing response for ID {response_id}: {e}")
+        logger.info(
+            f"Failed to retrieve existing result for receipt_ID = {receipt_id}: {e}"
+        )
         return None
 
 
@@ -144,7 +179,8 @@ def save_response_and_return_result(
 ) -> ReceiptApproverResponse:
     bind_engine = db.get_bind()
     logger.info(
-        f"<<<<<<<< Engine URL: {bind_engine.url} Is Engine In-Memory: {'sqlite' in bind_engine.url.drivername and ':memory:' in str(bind_engine.url)}"
+        f"<<<<<<<< Engine URL: {bind_engine.url} Is Engine In-Memory: \
+        {'sqlite' in bind_engine.url.drivername and ':memory:' in str(bind_engine.url)}"
     )
     # Use SQLAlchemy inspector to get the list of tables
     inspector = inspect(bind_engine)

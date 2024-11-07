@@ -1,18 +1,12 @@
-import uuid
-
-from sqlalchemy import JSON, Column, DateTime, String
+from sqlalchemy import JSON, Column, DateTime, Integer, String
 from sqlalchemy.sql import func
 
 from app.config.database import Base
-from app.config.guid import GUID
 
 
 class ReceiptApproverResponse(Base):
     __tablename__ = "receipt_approver_responses"
-    id = Column(
-        GUID(), primary_key=True, default=uuid.uuid4, unique=True, nullable=False
-    )
-
+    receipt_id = Column(Integer, primary_key=True, nullable=False)
     client = Column(String, nullable=False)
     ocr_raw = Column(JSON, nullable=False)
     processed = Column(JSON, nullable=False)
@@ -23,4 +17,4 @@ class ReceiptApproverResponse(Base):
     )
 
     def __str__(self):
-        return f"<ReceiptApproverResponse id={self.id}, client={self.client}, last_updated={self.last_updated}>"
+        return f"<ReceiptApproverResponse id={self.receipt_id}, client={self.client}, last_updated={self.last_updated}>"
