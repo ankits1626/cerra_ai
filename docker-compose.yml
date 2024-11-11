@@ -1,0 +1,39 @@
+services:
+  app:
+    build: .
+    container_name: ms_ai
+    command: sh -c "pip install --no-cache-dir -r requirements.txt && wait-for-it db:5432 -- uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload"
+    volumes:
+      - .:/app
+    ports:
+      - "8003:8003"
+    depends_on:
+      - db
+    env_file:
+      - .env
+
+  db:
+    image: postgres:15
+    container_name: ms_ai_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"  # Mapping host port 5433 to container port 5432
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+
+  alembic:
+    build: .
+    container_name: alembic_migrations
+    command: alembic upgrade head
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+    env_file:
+      - .env
+
+volumes:
+  postgres_data:
