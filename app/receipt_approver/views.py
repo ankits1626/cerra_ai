@@ -4,7 +4,7 @@ from typing import Dict, Optional
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
@@ -15,7 +15,6 @@ from app.receipt_approver.model_utils import predict_receipt_type
 from app.receipt_approver.models import ReceiptApproverResponse
 
 from .schemas import (
-    FetchReceiptValidationDataRequest,
     ReceiptApproverResponseSchema,
     ReceiptData,
 )
@@ -28,13 +27,15 @@ logger = logging.getLogger(__name__)
 @router.get("/receipt-validation-data", response_model=ReceiptApproverResponseSchema)
 def get_receipt_validation_data(
     request: Request,
-    data: FetchReceiptValidationDataRequest,
+    receipt_id: int = Query(
+        ..., description="The ID of the receipt to fetch validation data for"
+    ),
     db: Session = Depends(get_db),
 ):
     """
     Fetch validation data of a receipt based on its receipt id
     ### Input:
-    - FetchReceiptValidationDataRequest model encapsulating the receipt_id
+    - `receipt_id` (Query parameter): ID of the receipt to fetch validation data.
     ### Output:
     - **ReceiptApproverResponseSchema**: Contains the validation result, OCR data,
         and prediction information.
@@ -43,7 +44,7 @@ def get_receipt_validation_data(
     # Example filtering based on criteria in ReceiptValidationRequest
     receipt = (
         db.query(ReceiptApproverResponse)
-        .filter(ReceiptApproverResponse.receipt_id == data.receipt_id)
+        .filter(ReceiptApproverResponse.receipt_id == receipt_id)
         .first()
     )
 
