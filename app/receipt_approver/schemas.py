@@ -4,10 +4,6 @@ from typing import Dict, Optional
 from pydantic import BaseModel, ConfigDict
 
 
-class FetchReceiptValidationDataRequest(BaseModel):
-    receipt_id: int
-
-
 class ReceiptData(BaseModel):
     receipt_id: int  # this is unique identifier from django
     receipt_number: str
