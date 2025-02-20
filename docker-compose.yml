@@ -2,13 +2,14 @@ services:
   app:
     build: .
     container_name: ms_ai
-    command: sh -c "pip install --no-cache-dir -r requirements.txt && wait-for-it db:5432 -- uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload"
     volumes:
       - .:/app
     ports:
       - "8003:8003"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+        restart: true
     env_file:
       - .env
 
@@ -23,6 +24,13 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+
 
   alembic:
     build: .
@@ -31,7 +39,9 @@ services:
     volumes:
       - .:/app
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+        restart: true
     env_file:
       - .env
 
